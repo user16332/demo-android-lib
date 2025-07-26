@@ -4,20 +4,14 @@ Build-Type:         Simple
 cabal-version:      >=1.10
 
 Library
-  exposed-modules:  Tokens.Android.IDIoT
-                    Tokens.Android.Keystore
-                    Tokens.Android.Log
-                    Tokens.Android.System
-                    Tokens.Android.UI
-                    Tokens.Android.USB
-                    Tokens.Auth
-                    Tokens.Dispatch
-                    Tokens.Events
-                    Tokens.Sync
-                    Tokens.Time
-                    Tokens.UI
-                    Tokens.USB
-                    Tokens.XId
+  exposed-modules:  Demo.Android.Log
+                    Demo.Android.System
+                    Demo.Android.UI
+                    Demo.Dispatch
+                    Demo.Events
+                    Demo.Time
+                    Demo.UI
+                    Demo.XId
   ghc-options:      -O2 -Wall -fno-ignore-asserts -fwarn-tabs -fwarn-missing-import-lists -Wunused-packages
   build-depends:    asn1-encoding,
                     asn1-parse,
@@ -36,9 +30,6 @@ Library
                     entropy,
                     errors,
                     exceptions,
-                    hcobs,
-                    idiot,
-                    idiot-cryptonite,
                     jni,
                     jvm,
                     lens,

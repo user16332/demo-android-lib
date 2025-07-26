@@ -3,7 +3,7 @@
 {-# LANGUAGE PartialTypeSignatures      #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
-module Tokens.XId
+module Demo.XId
   ( XId
   , fromByteString
   , toByteString

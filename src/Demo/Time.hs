@@ -1,4 +1,4 @@
-module Tokens.Time
+module Demo.Time
   ( getTime
   , timer
   , fromUnits

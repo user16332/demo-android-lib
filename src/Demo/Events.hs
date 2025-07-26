@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass      #-}
 {-# LANGUAGE TemplateHaskell     #-}
 
-module Tokens.Events
+module Demo.Events
   ( Context
   , Message(..)
   , Event(..)
@@ -45,7 +45,7 @@ import           GHC.Generics                        (Generic)
 import           System.Posix.Types                  (Fd)
 import           System.Random.SplitMix              (SMGen)
 
-import           Tokens.XId                          (XId)
+import           Demo.XId                            (XId)
 
 type Counter = Word64 -- TODO
 

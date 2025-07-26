@@ -1,1 +1,1 @@
-git daemon --export-all --base-path=lib
+git daemon --listen=127.0.0.1 --export-all --base-path=lib

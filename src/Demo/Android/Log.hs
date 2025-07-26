@@ -1,7 +1,7 @@
 {-# LANGUAGE CApiFFI                    #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Tokens.Android.Log
+module Demo.Android.Log
   ( debug
   , info
   , warn
@@ -58,7 +58,7 @@ foreign import capi "__android_log_print" _log :: CInt -> CString -> CString -> 
 
 logAndroid :: MonadIO m => LogPriority -> Text -> m ()
 logAndroid prio msg = liftIO $ do
-  T.withCString "Tokens" $ \tag ->
+  T.withCString "Demo" $ \tag ->
     T.withCString msg $ _log (fromIntegral . fromEnum $ prio) tag
 --  logUDP prio msg
 

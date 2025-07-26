@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
-module Tokens.Android.UI
+module Demo.Android.UI
   ( Event(Event)
   , EventDetails(..)
   , Node(Node)
@@ -53,9 +53,9 @@ import           Language.Java                       (J(J), JString,
                                                       methodSignature, callStatic)
 import           Prelude.Singletons                  (SingI(sing), Sing, SomeSing(SomeSing))
 
-import           Tokens.Android.Log                  (debug, info, err)
-import           Tokens.Android.System               (JContext, IntentFilter, JXId, JIntent)
-import           Tokens.XId                          (XId)
+import           Demo.Android.Log                    (debug, info, err)
+import           Demo.Android.System                 (JContext, IntentFilter, JXId, JIntent)
+import           Demo.XId                            (XId)
 
 handleException_ :: IO a -> IO a
 handleException_ =
@@ -70,105 +70,12 @@ handleException =
 type JActivity = J ('Class "android.app.Activity")
 type JView = J ('Class "android.view.View")
 
---instance Interpretation URI where
---  type Interp URI = 'Class "android.net.Uri"
---
---instance Reify URI where
---  reify = mkURI <=< reify
-
-data TextView
-  = TextView
-  deriving (Eq, Ord, Show, Generic, NFData)
-makeLenses ''TextView
-
-data Ctrl
-  = CtrlText
-    { _txTextView :: TextView
-    , _txText :: Text
-    } deriving (Eq, Ord, Show, Generic, NFData)
-makeLenses ''Ctrl
-
-data ViewGroup
-  = FrameLayout
-  deriving (Eq, Ord, Show, Generic, NFData)
-
-data View
-  = Parent
-    { _paViewGroup :: ViewGroup
-    }
-  | Leaf
-    { _lfCtrl :: Ctrl
-    }
-  deriving (Eq, Ord, Show, Generic, NFData)
-makeLenses ''View
-
-data Node = Node
-  { _ndLayoutParams :: ()
-  , _ndView :: View
-  }
-  deriving (Eq, Show, Generic, NFData)
-makeLenses ''Node
-
-data JNodeCache = JNodeCache JView [JNodeCache]
-
-javaClass :: Node -> Text
-javaClass (Node _ (Leaf (CtrlText TextView _))) = "android.widget.TextView"
-javaClass _ = undefined
-
-createNode :: JActivity -> Node -> IO (Node, JNodeCache)
-createNode jactivity (Node _ (Leaf (CtrlText TextView _))) = do
-  -- TODO: check initial text
-  jtextview <- new (unsafeCast jactivity :: JContext) >>= newGlobalRef :: IO (J ('Class "android.widget.TextView"))
-  pure (Node def (Leaf (CtrlText TextView "")), JNodeCache (unsafeCast jtextview) [])
-createNode _ _ = undefined
-
-syncText :: J ('Class "android.widget.TextView") -> Text -> Text -> IO Text
-syncText jtextview text text' = do
-  when (text /= text') $ do
-    jstring <- reflect text'
-    call jtextview "setText" (unsafeCast jstring :: J ('Class "java.lang.CharSequence"))
-  pure text'
-
-syncCtrl :: JActivity -> JView -> Ctrl -> Ctrl -> IO Ctrl
-syncCtrl jactivity jview (CtrlText textView text) (CtrlText textView' text') = do
-  text'' <- syncText (unsafeCast jview) text text'
-  textView'' <- case (textView, textView') of
-    (TextView, TextView) -> pure TextView
-    _ -> undefined -- TODO
-  pure $ CtrlText textView'' text''
-syncCtrl _ _ _ _ = undefined
-
-syncView :: JActivity -> JView -> View -> [JNodeCache] -> View -> IO (View, [JNodeCache])
-syncView jactivity jview (Parent viewGroup) caches (Parent viewGroup') = undefined
-syncView jactivity jview (Leaf ctrl) [] (Leaf ctrl') = do
-  ctrl'' <- syncCtrl jactivity jview ctrl ctrl'
-  pure (Leaf ctrl'', [])
-syncView _ _ _ _ _ = undefined -- TODO
-
-syncNode :: JActivity -> JView -> Node -> [JNodeCache] -> Node -> IO (Node, [JNodeCache])
-syncNode jactivity jview (Node params view) caches (Node params' view') = do
-  -- TODO: compare first
---  params' <- syncLayoutParams jnode view view`
-  let params'' = params
-  (view'', caches'') <- syncView jactivity jview view caches view'
-  pure (Node params'' view'', caches'')
-syncNode _ _ _ _ _ = undefined
-
-syncActivity :: JActivity -> (Node, JNodeCache) -> Node -> IO (Node, JNodeCache)
-syncActivity jactivity (rendered, caches) node = do
-  (rendered', JNodeCache jview' caches') <- flip (bool $ pure (rendered, caches)) (javaClass rendered /= javaClass node) $ do
-    (rendered', cachedView'@(JNodeCache jview' _)) <- createNode jactivity node
-    call jactivity "setContentView" jview' :: IO ()
-    pure (rendered', cachedView')
-  (rendered'', caches'') <- syncNode jactivity jview' rendered' caches'  node
-  pure (rendered'', JNodeCache jview' caches'')
-
 newtype ObjectId = ObjectId Int32
   deriving (Eq, Ord, Show)
   deriving newtype NFData
 
 objectId :: JObject -> IO ObjectId
-objectId jobj = fmap ObjectId (callStatic "java.lang.System" "identityHashCode" jobj :: IO Int32)
+objectId obj = fmap ObjectId (callStatic "java.lang.System" "identityHashCode" obj :: IO Int32)
 
 data ActivityEventType
   = ActivityCreate
@@ -186,7 +93,7 @@ data EventDetails
   deriving (Eq, Show, Generic, NFData)
 
 instance Interpretation EventDetails where
-  type Interp EventDetails = 'Class "p2p.tokens.Events.Event"
+  type Interp EventDetails = 'Class "p2p.demo.Events.Event"
 
 instance Reify EventDetails where
   reify jevent = do
@@ -194,12 +101,11 @@ instance Reify EventDetails where
     jstring <- call jclass "getName" :: IO JString
     className <- reify jstring :: IO Text
     case className of
-      "p2p.tokens.MainActivity$Event" -> do
-        let jactivityEvent = unsafeCast jevent :: J ('Class "p2p.tokens.MainActivity$Event")
-        jactivity <- call jactivityEvent "getActivity" >>= newGlobalRef :: IO JActivity -- TODO: newGLobalRef?
-        code <- call jactivityEvent "getCode" :: IO Int32
-        pure . ActivityEvent jactivity . toEnum . fromIntegral $ code
-      "p2p.tokens.BluetoothGattCallback$Event" -> pure BluetoothGattEvent
+      "p2p.demo.MainActivity$Event" -> do
+        let activityEvent = unsafeCast jevent :: J ('Class "p2p.demo.MainActivity$Event")
+        activity <- call activityEvent "getActivity" >>= newGlobalRef :: IO JActivity -- TODO: newGLobalRef?
+        code <- call activityEvent "getCode" :: IO Int32
+        pure . ActivityEvent activity . toEnum . fromIntegral $ code
       _ -> undefined -- TODO
 
 data Event = Event XId EventDetails
@@ -208,29 +114,36 @@ data Event = Event XId EventDetails
 type UIUpdateCallback = JNIEnv -> Ptr JClass -> Ptr JActivity -> IO ()
 foreign import ccall "wrapper" wrapUIUpdate :: UIUpdateCallback -> IO (FunPtr UIUpdateCallback)
 
-type UIEventCallback = JNIEnv -> Ptr JClass -> Ptr JXId -> Ptr (J ('Class "p2p.tokens.Events.Event")) -> IO ()
+type UIEventCallback = JNIEnv -> Ptr JClass -> Ptr JXId -> Ptr (J ('Class "p2p.demo.Events.Event")) -> IO ()
 foreign import ccall "wrapper" wrapUIEvent :: UIEventCallback -> IO (FunPtr UIEventCallback)
 
-registerPorts :: MVar Node -> MVar Event -> IO ()
+registerPorts :: MVar Text -> MVar Event -> IO ()
 registerPorts uiUpdatePort uiEventPort = do
-  renderedPort <- newMVar (jnull, (Node def (Leaf (CtrlText TextView "")), JNodeCache jnull []))
-  uiUpdatePtr <- wrapUIUpdate $ \_ _ jactivityPtr -> handleException_ $ do
+  activityCache <- newMVar (jnull :: JActivity)
+  uiUpdatePtr <- wrapUIUpdate $ \_ _ activityPtr -> handleException_ $ do
     opt <- tryTakeMVar uiUpdatePort
-    for_ opt $ \node -> do
-      (jactivity, rendered) <- takeMVar renderedPort
-      jactivity' <- objectFromPtr jactivityPtr
-      isSameActivity <- isSameObject jactivity jactivity'
-      (jactivity'', rendered'') <- flip (bool $ pure (jactivity, rendered)) (not isSameActivity) $ do
-        rendered'' <- initUI jactivity'
-        jactivity'' <- newGlobalRef jactivity'
-        pure (jactivity'', rendered'')
-      rendered''' <- syncActivity jactivity'' rendered'' node
-      putMVar renderedPort (jactivity'', rendered''')
+    for_ opt $ \text -> do
+      activity <- takeMVar activityCache
+      activity' <- objectFromPtr activityPtr
+      isSameActivity <- isSameObject activity activity'
+      activity'' <- flip (bool $ pure activity) (not isSameActivity) $ do
+        initUI activity'
+        activity'' <- newGlobalRef activity'
+        pure activity''
+      label <- call
+        (unsafeCast activity :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
+        "findViewById"
+        (123 :: Float) :: IO ()
+      call
+        (unsafeCast label :: J ('Class "android.widget.TextView"))
+        "setText"
+        (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+      putMVar activityCache activity''
   uiEventPtr <- wrapUIEvent $ \_ _ jeventIdPtr jeventPtr -> handleException_ $ do
     eventId <- objectFromPtr jeventIdPtr >>= reify
     details <- objectFromPtr jeventPtr >>= reify
     putMVar uiEventPort $ Event eventId details
-  clazz <- getClass (SClass "p2p.tokens.Events") >>= newGlobalRef
+  clazz <- getClass (SClass "p2p.demo.Events") >>= newGlobalRef
   registerNatives clazz
     [ JNINativeMethod
         "onUIUpdate"
@@ -241,10 +154,10 @@ registerPorts uiUpdatePort uiEventPort = do
         )
         uiUpdatePtr
     , JNINativeMethod
-        "onUIEvent"
+        "onEvent"
         (methodSignature
-          [ SomeSing (sing :: Sing ('Class "p2p.tokens.XId"))
-          , SomeSing (sing :: Sing ('Class "p2p.tokens.Events$Event"))
+          [ SomeSing (sing :: Sing ('Class "p2p.demo.XId"))
+          , SomeSing (sing :: Sing ('Class "p2p.demo.Events$Event"))
           ]
           (sing :: Sing 'Void)
         )
@@ -252,19 +165,78 @@ registerPorts uiUpdatePort uiEventPort = do
     ]
 
 notifyUIUpdate :: JActivity -> IO ()
-notifyUIUpdate jactivity = do
+notifyUIUpdate activity = do
   runInBoundThread . runInAttachedThread . handleException_ $
-    call (unsafeCast jactivity :: J ('Class "java.lang.Runnable")) "run" :: IO ()
+    call (unsafeCast activity :: J ('Class "java.lang.Runnable")) "run" :: IO ()
 
-initUI :: JActivity -> IO (Node, JNodeCache)
-initUI jactivity = handleException_ $ do
-  jlabel <- new (unsafeCast jactivity :: JContext) >>= newGlobalRef :: IO (J ('Class "android.widget.TextView"))
-  jwrap <- getStaticField "android.view.ViewGroup$LayoutParams" "WRAP_CONTENT" :: IO Int32
-  jgravity <- getStaticField "android.view.Gravity" "CENTER" :: IO Int32
-  jlayout <- new jwrap jwrap jgravity :: IO (J ('Class "android.widget.FrameLayout$LayoutParams"))
-  call
-    (unsafeCast jactivity :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
-    "setContentView"
-    (unsafeCast jlabel :: J ('Class "android.view.View"))
-    (unsafeCast jlayout :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()
-  pure (Node def (Leaf (CtrlText TextView "")), JNodeCache (unsafeCast jlabel) [])
+initUI :: JActivity -> IO ()
+initUI activity = handleException_ $ do
+  wrapContent <- getStaticField "android.view.ViewGroup$LayoutParams" "WRAP_CONTENT" :: IO Int32
+  matchParent <- getStaticField "android.view.ViewGroup$LayoutParams" "MATCH_PARENT" :: IO Int32
+  gravityCenter <- getStaticField "android.view.Gravity" "CENTER" :: IO Int32
+
+  linearLayout <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.LinearLayout"))
+
+  do
+    vertical <- getStaticField "android.widget.LinearLayout" "VERTICAL" :: IO Int32
+    call linearLayout "setOrientation" vertical :: IO ()
+    call
+      (unsafeCast activity :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
+      "setContentView"
+      (unsafeCast linearLayout :: JView) :: IO ()
+
+  do
+    frameLayout <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.FrameLayout"))
+    do
+      layoutParams <- new matchParent wrapContent (1.0 :: Float) :: IO (J ('Class "android.widget.LinearLayout$LayoutParams"))
+      call
+        (unsafeCast linearLayout :: J ('Class "android.view.ViewGroup"))
+        "addView"
+        (unsafeCast frameLayout :: JView)
+        (unsafeCast layoutParams :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()
+
+    do
+      label <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.TextView"))
+      text <- reflect ("12:34:56" :: Text)
+      call
+        (unsafeCast label :: JView)
+        "setId"
+        (123 :: Int32) :: IO ()
+      call
+        (unsafeCast label :: J ('Class "android.widget.TextView"))
+        "setText"
+        (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+      call
+        (unsafeCast label :: J ('Class "android.widget.TextView"))
+        "setTextSize"
+        (50.0 :: Float) :: IO ()
+      layoutParams <- new wrapContent wrapContent gravityCenter :: IO (J ('Class "android.widget.FrameLayout$LayoutParams"))
+      call
+        (unsafeCast frameLayout :: J ('Class "android.view.ViewGroup"))
+        "addView"
+        (unsafeCast label :: JView)
+        (unsafeCast layoutParams :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()
+
+  do
+    frameLayout <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.FrameLayout"))
+    do
+      layoutParams <- new matchParent wrapContent (1.0 :: Float) :: IO (J ('Class "android.widget.LinearLayout$LayoutParams"))
+      call
+        (unsafeCast linearLayout :: J ('Class "android.view.ViewGroup"))
+        "addView"
+        (unsafeCast frameLayout :: JView)
+        (unsafeCast layoutParams :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()
+
+    do
+      button <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.Button"))
+      text <- reflect ("Beep!" :: Text)
+      call
+        (unsafeCast button :: J ('Class "android.widget.TextView"))
+        "setText"
+        (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+      layoutParams <- new wrapContent wrapContent gravityCenter :: IO (J ('Class "android.widget.FrameLayout$LayoutParams"))
+      call
+        (unsafeCast frameLayout :: J ('Class "android.view.ViewGroup"))
+        "addView"
+        (unsafeCast button :: JView)
+        (unsafeCast layoutParams :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()

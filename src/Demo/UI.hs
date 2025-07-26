@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TemplateHaskell            #-}
 
-module Tokens.UI
+module Demo.UI
   ( ui
   ) where
 
@@ -40,16 +40,16 @@ import           GHC.Generics                        (Generic)
 import           Language.Java                       (J(J))
 import           System.Clock                        (TimeSpec)
 
-import           Tokens.Events                       (Event(Event), EventPattern(..), Ext(Ext), coi, apply)
-import           Tokens.Time                         (timer, getTime)
-import           Tokens.Android.Log                  (info, debug, err)
-import           Tokens.Android.UI                   (Node(Node), JContext, EventDetails(ActivityEvent),
+import           Demo.Events                         (Event(Event), EventPattern(..), Ext(Ext), coi, apply)
+import           Demo.Time                           (timer, getTime)
+import           Demo.Android.Log                    (info, debug, err)
+import           Demo.Android.UI                     (Node(Node), JContext, EventDetails(ActivityEvent),
                                                       View(Leaf), Ctrl(CtrlText), TextView(TextView), JActivity,
                                                       ActivityEventType(ActivityCreate),
                                                       registerPorts, notifyUIUpdate)
-import qualified Tokens.Android.UI                   as UI (Event(Event))
-import           Tokens.XId                          (XId)
-import qualified Tokens.XId                          as XId (fromByteString)
+import qualified Demo.Android.UI                     as UI (Event(Event))
+import           Demo.XId                            (XId)
+import qualified Demo.XId                            as XId (fromByteString)
 
 handleException :: (MonadIO m, MonadError Text m) => IO a -> m a
 handleException =
@@ -98,7 +98,7 @@ ui jctx = do
     uiEventPort <- newEmptyMVar -- TODO: queue??
     registerPorts uiUpdatePort uiEventPort
     pure (uiUpdatePort, uiEventPort)
-  step <- liftA2 pair (liftIO $ timer (1000 :: Millisecond)) . pure $ uiEvents uiEventPort
+  step <- liftA2 pair (liftIO $ timer (100 :: Millisecond)) . pure $ uiEvents uiEventPort
   let go state = Step $ \() -> do
         let (app0, ui0, step0) = force state
 --        uninterruptibleMask_ . debug . T.pack . show $ app0
@@ -115,7 +115,7 @@ ui jctx = do
 
         let app1 = (appEndo $ ext `apply` events') app0
 
-        let ui1 = Node def (Leaf (CtrlText TextView "boo"))
+        let ui1 =
 
 --        let ui1 = flip (maybe ui) eventOpt $ \case
 --              Event _ ActionEvent -> ui & ndRegion . paChildren . ix "welcome" . _2 . ndRegion . lfCtrl . lbText .~ "42!!"

@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
-module Tokens.Android.System
+module Demo.Android.System
   ( JContext
   , JIntent
   , JXId
@@ -39,8 +39,8 @@ import           Language.Java                       (J(J), JString, JByteArray,
                                                       call, reflect, reify, new,
                                                       unsafeCast, getStaticField, callStatic)
 
-import           Tokens.Android.Log                  (debug, info, err)
-import           Tokens.XId                          (XId, fromByteString, toByteString)
+import           Demo.Android.Log                    (debug, info, err)
+import           Demo.XId                            (XId, fromByteString, toByteString)
 
 handleException_ :: IO a -> IO a
 handleException_ =
@@ -55,13 +55,13 @@ handleException =
 type JContext = J ('Class "android.content.Context")
 type JIntent = J ('Class "android.content.Intent")
 type JIntentFilter = J ('Class "android.content.IntentFilter")
-type JXId = J ('Class "p2p.tokens.XId")
+type JXId = J ('Class "p2p.demo.XId")
 
 instance NFData (J a) where
   rnf jctx = jctx `seq` () -- TODO: ???
 
 instance Interpretation XId where
-  type Interp XId = 'Class "p2p.tokens.XId"
+  type Interp XId = 'Class "p2p.demo.XId"
 
 instance Reify XId where
   reify jxid = do
@@ -73,7 +73,7 @@ instance Reify XId where
 instance Reflect XId where
   reflect xid = do
     jbytes <- reflect . toByteString $ xid
-    callStatic "p2p.tokens.XId" "create" jbytes
+    callStatic "p2p.demo.XId" "create" jbytes
 
 data Intent a = Intent
   { _inAction :: Text
