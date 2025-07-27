@@ -8,12 +8,10 @@
 module Demo.Android.System
   ( JContext
   , JIntent
-  , JXId
   , JIntentFilter
   , ObjectId(ObjectId)
   , Intent
   , IntentFilter(IntentFilter)
-  , beep
   ) where
 
 import           Control.DeepSeq                     (NFData(rnf))
@@ -40,7 +38,6 @@ import           Language.Java                       (J(J), JString, JByteArray,
                                                       unsafeCast, getStaticField, callStatic)
 
 import           Demo.Android.Log                    (debug, info, err)
-import           Demo.XId                            (XId, fromByteString, toByteString)
 
 handleException_ :: IO a -> IO a
 handleException_ =
@@ -55,25 +52,9 @@ handleException =
 type JContext = J ('Class "android.content.Context")
 type JIntent = J ('Class "android.content.Intent")
 type JIntentFilter = J ('Class "android.content.IntentFilter")
-type JXId = J ('Class "p2p.demo.XId")
 
 instance NFData (J a) where
   rnf jctx = jctx `seq` () -- TODO: ???
-
-instance Interpretation XId where
-  type Interp XId = 'Class "p2p.demo.XId"
-
-instance Reify XId where
-  reify jxid = do
-    jbytes <- call jxid "getBytes" :: IO JByteArray
-    bytes <- reify jbytes
-    -- TODO: exception
-    pure $ fromMaybe undefined $ fromByteString bytes
-
-instance Reflect XId where
-  reflect xid = do
-    jbytes <- reflect . toByteString $ xid
-    callStatic "p2p.demo.XId" "create" jbytes
 
 data Intent a = Intent
   { _inAction :: Text
@@ -118,10 +99,3 @@ objectId jobj = fmap ObjectId (callStatic "java.lang.System" "identityHashCode" 
 
 --data FileId = FileId Posix.DeviceID Posix.FileID
 --  deriving (Eq, Ord, Show, Generic, NFData)
-
-beep :: IO ()
-beep = handleException_ $ do
-  musicStream <- getStaticField "android.media.AudioManager" "STREAM_MUSIC" :: IO Int32
-  toneGenerator <- new musicStream (100 :: Int32) :: IO (J ('Class "android.media.ToneGenerator"))
-  beepTone <- getStaticField "android.media.ToneGenerator" "TONE_PROP_BEEP" :: IO Int32
-  void $ (call toneGenerator "startTone" beepTone (150 :: Int32) :: IO Bool)

@@ -37,6 +37,7 @@ import           Data.Bool                           (bool)
 import qualified Data.ByteString.Lazy                as BL (ByteString, null, unpack)
 import           Data.Dynamic                        (Dynamic, fromDyn)
 import           Data.Foldable                       (find)
+import           Data.Int                            (Int32)
 import           Data.Monoid                         (Endo(Endo, appEndo))
 import           Data.Set                            (Set)
 import qualified Data.Set                            as Set (fromList)
@@ -44,8 +45,6 @@ import           Data.Word                           (Word32, Word64)
 import           GHC.Generics                        (Generic)
 import           System.Posix.Types                  (Fd)
 import           System.Random.SplitMix              (SMGen)
-
-import           Demo.XId                            (XId)
 
 type Counter = Word64 -- TODO
 
@@ -77,7 +76,7 @@ data Event = Event EventPattern Dynamic
 
 data EventPattern -- TODO: "range". "dimension", "axis", "subspace"?
   = EventTimestamp
-  | EventUI XId
+  | EventUI Int32
   | EventOff
   deriving (Eq, Show)
 

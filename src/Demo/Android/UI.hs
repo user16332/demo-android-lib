@@ -9,10 +9,6 @@
 module Demo.Android.UI
   ( Event(Event)
   , EventDetails(..)
-  , Node(Node)
-  , View(Parent, Leaf)
-  , Ctrl(CtrlText)
-  , TextView(TextView)
   , JContext
   , JActivity
   , ActivityEventType(..)
@@ -20,9 +16,11 @@ module Demo.Android.UI
   , registerPorts
   , notifyUIUpdate
   , initUI
+  , buttonClickEventId
+  , beep
   ) where
 
-import           Control.Concurrent                  (runInBoundThread)
+import           Control.Concurrent                  (runInBoundThread, forkIO)
 import           Control.Concurrent.MVar             (MVar, tryTakeMVar, putMVar, takeMVar, newMVar)
 import           Control.DeepSeq                     (NFData)
 import           Control.Exception                   (SomeException)
@@ -35,27 +33,33 @@ import           Control.Monad.IO.Class              (MonadIO(liftIO))
 import           Data.Bool                           (bool)
 import           Data.Default                        (Default(def))
 import           Data.Foldable                       (for_, find)
+import           Data.Functor                        (void)
 import           Data.Int                            (Int32)
 import           Data.Text                           (Text)
 import qualified Data.Text                           as T (pack)
 import           Foreign.JNI                         (JNINativeMethod(JNINativeMethod), JVMException,
                                                       getObjectClass, showException, isSameObject,
                                                       registerNatives, newGlobalRef, runInAttachedThread)
-import           Foreign.JNI.Types                   (JClass, JType(Class, Void), JNIEnv(..),
-                                                      JObject, jnull, objectFromPtr)
+import           Foreign.JNI.Types                   (JClass, JType(Class, Void, Prim), JNIEnv(..),
+                                                      JObject, JObjectArray, jnull, objectFromPtr)
 import           Foreign.Ptr                         (Ptr, FunPtr)
 import           GHC.Generics                        (Generic)
 import           Language.Java                       (J(J), JString,
                                                       Interpretation(Interp), Reflect, Reify(reify),
-                                                      SJType(SClass),
+                                                      SJType(SClass), toArray,
                                                       call, reflect, reify, new, getClass,
                                                       unsafeCast, getStaticField,
                                                       methodSignature, callStatic)
 import           Prelude.Singletons                  (SingI(sing), Sing, SomeSing(SomeSing))
 
 import           Demo.Android.Log                    (debug, info, err)
-import           Demo.Android.System                 (JContext, IntentFilter, JXId, JIntent)
-import           Demo.XId                            (XId)
+import           Demo.Android.System                 (JContext, IntentFilter, JIntent)
+
+buttonViewId :: Int32
+buttonViewId = 123
+
+buttonClickEventId :: Int32
+buttonClickEventId = 1001
 
 handleException_ :: IO a -> IO a
 handleException_ =
@@ -89,7 +93,7 @@ data ActivityEventType
 
 data EventDetails
   = ActivityEvent JActivity ActivityEventType
-  | BluetoothGattEvent
+  | MethodInvocation Text JObjectArray
   deriving (Eq, Show, Generic, NFData)
 
 instance Interpretation EventDetails where
@@ -106,15 +110,21 @@ instance Reify EventDetails where
         activity <- call activityEvent "getActivity" >>= newGlobalRef :: IO JActivity -- TODO: newGLobalRef?
         code <- call activityEvent "getCode" :: IO Int32
         pure . ActivityEvent activity . toEnum . fromIntegral $ code
+      "p2p.demo.VoidInvocationHandler$Event" -> do
+        let methodInvocation = unsafeCast jevent :: J ('Class "p2p.demo.VoidInvocationHandler$Event")
+        jstring <- call methodInvocation "getMethod" >>= newGlobalRef :: IO JString -- TODO: newGLobalRef?
+        method <- reify jstring
+        args <- call methodInvocation "getArgs" :: IO JObjectArray
+        pure $ MethodInvocation method args
       _ -> undefined -- TODO
 
-data Event = Event XId EventDetails
+data Event = Event Int32 EventDetails
   deriving (Eq, Show, Generic, NFData)
 
 type UIUpdateCallback = JNIEnv -> Ptr JClass -> Ptr JActivity -> IO ()
 foreign import ccall "wrapper" wrapUIUpdate :: UIUpdateCallback -> IO (FunPtr UIUpdateCallback)
 
-type UIEventCallback = JNIEnv -> Ptr JClass -> Ptr JXId -> Ptr (J ('Class "p2p.demo.Events.Event")) -> IO ()
+type UIEventCallback = JNIEnv -> Ptr JClass -> Int32 -> Ptr (J ('Class "p2p.demo.Events.Event")) -> IO ()
 foreign import ccall "wrapper" wrapUIEvent :: UIEventCallback -> IO (FunPtr UIEventCallback)
 
 registerPorts :: MVar Text -> MVar Event -> IO ()
@@ -131,17 +141,17 @@ registerPorts uiUpdatePort uiEventPort = do
         activity'' <- newGlobalRef activity'
         pure activity''
       label <- call
-        (unsafeCast activity :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
+        (unsafeCast activity'' :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
         "findViewById"
-        (123 :: Float) :: IO ()
+        buttonViewId :: IO JView
+      string <- reflect text
       call
         (unsafeCast label :: J ('Class "android.widget.TextView"))
         "setText"
-        (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+        (unsafeCast string :: J ('Class "java.lang.CharSequence")) :: IO ()
       putMVar activityCache activity''
-  uiEventPtr <- wrapUIEvent $ \_ _ jeventIdPtr jeventPtr -> handleException_ $ do
-    eventId <- objectFromPtr jeventIdPtr >>= reify
-    details <- objectFromPtr jeventPtr >>= reify
+  uiEventPtr <- wrapUIEvent $ \_ _ eventId eventPtr -> handleException_ $ do
+    details <- objectFromPtr eventPtr >>= reify
     putMVar uiEventPort $ Event eventId details
   clazz <- getClass (SClass "p2p.demo.Events") >>= newGlobalRef
   registerNatives clazz
@@ -156,7 +166,7 @@ registerPorts uiUpdatePort uiEventPort = do
     , JNINativeMethod
         "onEvent"
         (methodSignature
-          [ SomeSing (sing :: Sing ('Class "p2p.demo.XId"))
+          [ SomeSing (sing :: Sing ('Prim "int"))
           , SomeSing (sing :: Sing ('Class "p2p.demo.Events$Event"))
           ]
           (sing :: Sing 'Void)
@@ -197,15 +207,10 @@ initUI activity = handleException_ $ do
 
     do
       label <- new (unsafeCast activity :: JContext) :: IO (J ('Class "android.widget.TextView"))
-      text <- reflect ("12:34:56" :: Text)
       call
         (unsafeCast label :: JView)
         "setId"
-        (123 :: Int32) :: IO ()
-      call
-        (unsafeCast label :: J ('Class "android.widget.TextView"))
-        "setText"
-        (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+        buttonViewId :: IO ()
       call
         (unsafeCast label :: J ('Class "android.widget.TextView"))
         "setTextSize"
@@ -234,9 +239,33 @@ initUI activity = handleException_ $ do
         (unsafeCast button :: J ('Class "android.widget.TextView"))
         "setText"
         (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
+      do
+        handler <- new buttonClickEventId :: IO (J ('Class "p2p.demo.VoidInvocationHandler"))
+        interface <- getClass (SClass "android.view.View$OnClickListener")
+        classLoader <- call interface "getClassLoader" :: IO (J ('Class "java.lang.ClassLoader"))
+        interfaces <- toArray [ interface ]
+        proxy <- callStatic
+          "java.lang.reflect.Proxy"
+          "newProxyInstance"
+          classLoader
+          interfaces
+          (unsafeCast handler :: J ('Class "java.lang.reflect.InvocationHandler")) :: IO JObject
+        call
+          (unsafeCast button :: J ('Class "android.view.View"))
+          "setOnClickListener"
+          (unsafeCast proxy :: J ('Class "android.view.View$OnClickListener")) :: IO ()
+
       layoutParams <- new wrapContent wrapContent gravityCenter :: IO (J ('Class "android.widget.FrameLayout$LayoutParams"))
       call
         (unsafeCast frameLayout :: J ('Class "android.view.ViewGroup"))
         "addView"
         (unsafeCast button :: JView)
         (unsafeCast layoutParams :: J ('Class "android.view.ViewGroup$LayoutParams")) :: IO ()
+
+beep :: IO ()
+beep =
+  void . forkIO . runInBoundThread . runInAttachedThread . handleException_ $ do
+    musicStream <- getStaticField "android.media.AudioManager" "STREAM_MUSIC" :: IO Int32
+    toneGenerator <- new musicStream (100 :: Int32) :: IO (J ('Class "android.media.ToneGenerator"))
+    beepTone <- getStaticField "android.media.ToneGenerator" "TONE_PROP_ACK" :: IO Int32
+    void $ (call toneGenerator "startTone" beepTone (150 :: Int32) :: IO Bool)

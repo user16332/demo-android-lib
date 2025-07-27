@@ -8,6 +8,7 @@ module Demo.UI
   ( ui
   ) where
 
+import           Control.Applicative                 ((<|>))
 import           Control.Concurrent                  (runInBoundThread)
 import           Control.Concurrent.Loops            (Step(Step, runStep), onCancel, loop, pair)
 import           Control.Concurrent.MVar             (MVar, tryTakeMVar, putMVar, takeMVar, newEmptyMVar)
@@ -25,13 +26,16 @@ import           Data.Bool                           (bool)
 import qualified Data.ByteString                     as BS (pack)
 import           Data.Default                        (Default(def))
 import           Data.Dynamic                        (toDyn, fromDyn)
-import           Data.Monoid                         (Endo(Endo, appEndo))
 import           Data.Foldable                       (for_, find)
 import           Data.Function                       ((&))
 import           Data.Functor                        (void)
-import           Data.Maybe                          (fromMaybe, catMaybes)
+import           Data.Int                            (Int32)
+import           Data.Maybe                          (fromMaybe, catMaybes, isNothing)
+import           Data.Monoid                         (Endo(Endo, appEndo))
 import           Data.Text                           (Text)
 import qualified Data.Text                           as T (pack)
+import           Data.Time.Clock                     (getCurrentTime)
+import           Data.Time.Format                    (formatTime, defaultTimeLocale)
 import           Data.Time.Units                     (Millisecond)
 import           Data.Traversable                    (for)
 import           Foreign.JNI                         (JVMException, showException,
@@ -43,13 +47,10 @@ import           System.Clock                        (TimeSpec)
 import           Demo.Events                         (Event(Event), EventPattern(..), Ext(Ext), coi, apply)
 import           Demo.Time                           (timer, getTime)
 import           Demo.Android.Log                    (info, debug, err)
-import           Demo.Android.UI                     (Node(Node), JContext, EventDetails(ActivityEvent),
-                                                      View(Leaf), Ctrl(CtrlText), TextView(TextView), JActivity,
-                                                      ActivityEventType(ActivityCreate),
-                                                      registerPorts, notifyUIUpdate)
+import           Demo.Android.UI                     (JContext, EventDetails(ActivityEvent, MethodInvocation),
+                                                      JActivity, ActivityEventType(ActivityCreate), beep,
+                                                      registerPorts, notifyUIUpdate, buttonClickEventId)
 import qualified Demo.Android.UI                     as UI (Event(Event))
-import           Demo.XId                            (XId)
-import qualified Demo.XId                            as XId (fromByteString)
 
 handleException :: (MonadIO m, MonadError Text m) => IO a -> m a
 handleException =
@@ -68,8 +69,8 @@ data AppState = AppState
   } deriving (Eq, Show, Generic, NFData)
 makeLenses ''AppState
 
-mainActivityEventId :: XId
-mainActivityEventId = fromMaybe undefined . XId.fromByteString . BS.pack $ [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]
+mainActivityEventId :: Int32
+mainActivityEventId = 1000
 
 forAppState :: AppState -> Ext AppState
 forAppState app = Ext $
@@ -100,31 +101,19 @@ ui jctx = do
     pure (uiUpdatePort, uiEventPort)
   step <- liftA2 pair (liftIO $ timer (100 :: Millisecond)) . pure $ uiEvents uiEventPort
   let go state = Step $ \() -> do
-        let (app0, ui0, step0) = force state
+        let (activityOpt0, ui0, step0) = force state
 --        uninterruptibleMask_ . debug . T.pack . show $ app0
-        let ext = forAppState app0
-        events <- uninterruptibleMask_ . fmap catMaybes . for (coi ext) $ \part -> either (\e -> err e *> pure Nothing) pure <=< runExceptT $
-          case part of
-            _ -> pure Nothing
-
-        (events', step1) <- flip (bool $ pure (events, step0)) (null events) $ do
-          ((now, uiEventOpt), step1) <- runStep step0 ((), ())
-          let tsEvents = pure . Event EventTimestamp $ toDyn now
-          let uiEvents = flip foldMap uiEventOpt $ \(UI.Event xid details) -> pure . Event (EventUI xid) $ toDyn details
-          pure (tsEvents <> uiEvents, step1)
-
-        let app1 = (appEndo $ ext `apply` events') app0
-
-        let ui1 =
-
---        let ui1 = flip (maybe ui) eventOpt $ \case
---              Event _ ActionEvent -> ui & ndRegion . paChildren . ix "welcome" . _2 . ndRegion . lfCtrl . lbText .~ "42!!"
-        for_ (app1 ^. appMainActivityOpt) $ \jactivity -> do
-          isSameActivity <- maybe (pure False) (uninterruptibleMask_ . either (\e -> err e *> pure False) pure <=< runExceptT . handleException . runInBoundThread . runInAttachedThread . isSameObject jactivity) $ app0 ^. appMainActivityOpt
-          when (not isSameActivity || ui1 /= ui0) $ do
+        ((_, uiEventOpt), step1) <- runStep step0 ((), ())
+        utc <- uninterruptibleMask_ getCurrentTime
+        let activityOpt1 =
+              (uiEventOpt >>= \case UI.Event eventId (ActivityEvent activity ActivityCreate) | eventId == mainActivityEventId -> Just activity; _ -> Nothing) <|> activityOpt0
+        for_ uiEventOpt $ \case UI.Event eventId (MethodInvocation _ _) | eventId == buttonClickEventId -> beep; _ -> pure ()
+        let ui1 = T.pack $ formatTime defaultTimeLocale "%H:%M:%S" utc
+        for_ activityOpt1 $ \activity ->
+          when (ui1 /= ui0 || isNothing activityOpt0) $ do
             void $ tryTakeMVar uiUpdatePort
             putMVar uiUpdatePort ui1
-            notifyUIUpdate jactivity
-        pure ((), go (app1, ui1, step1))
+            notifyUIUpdate activity
+        pure ((), go (activityOpt1, ui1, step1))
   now <- liftIO getTime
-  pure . loop () $ go (AppState now Nothing, Node def (Leaf (CtrlText TextView "")), step) -- initial
+  pure . loop () $ go (Nothing, "barbar", step) -- initial
