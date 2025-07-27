@@ -9,8 +9,6 @@ module Demo.Android.Log
   , runLoggingT
   ) where
 
-import           Control.Concurrent.MSem             (MSem,)
-import qualified Control.Concurrent.MSem             as MSem (new, with)
 import           Control.Monad.Catch                 (bracket)
 import           Control.Monad.IO.Class              (MonadIO(liftIO))
 import           Control.Monad.Logger                (LogLevel(LevelDebug, LevelInfo, LevelWarn,
@@ -25,10 +23,6 @@ import           Data.Time                           (UTCTime, getCurrentTime)
 import           Data.Time.Format                    (defaultTimeLocale, formatTime)
 import           Foreign.C.String                    (CString)
 import           Foreign.C.Types                     (CInt(CInt))
-import           Network.Socket                      (SockAddr(SockAddrInet), Family(AF_INET),
-                                                      SocketType(Datagram), defaultProtocol,
-                                                      socket, close, tupleToHostAddress, bind)
-import           Network.Socket.ByteString           (sendAllTo)
 import           System.IO.Unsafe                    (unsafePerformIO)
 
 data LogPriority
@@ -60,19 +54,6 @@ logAndroid :: MonadIO m => LogPriority -> Text -> m ()
 logAndroid prio msg = liftIO $ do
   T.withCString "Demo" $ \tag ->
     T.withCString msg $ _log (fromIntegral . fromEnum $ prio) tag
---  logUDP prio msg
-
-bindSem :: MSem Int
-bindSem = unsafePerformIO $ MSem.new 1
-
-logUDP :: MonadIO m => LogPriority -> Text -> m ()
-logUDP prio msg = liftIO $ do
-  utc <- getCurrentTime
-  let ts = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S%03Q" utc
-  let raw = T.encodeUtf8 $ ts <> " " <> T.singleton (prioChar prio) <> " " <> msg <> "\n"
-  MSem.with bindSem . bracket (socket AF_INET Datagram defaultProtocol) close $ \s -> do
-    bind s $ SockAddrInet 6789 0
-    sendAllTo s raw . SockAddrInet 6789 $ tupleToHostAddress (192, 168, 1, 3)
 
 debug :: MonadIO m => Text -> m ()
 debug = logAndroid PrioDebug

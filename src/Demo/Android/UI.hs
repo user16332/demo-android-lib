@@ -12,7 +12,6 @@ module Demo.Android.UI
   , JContext
   , JActivity
   , ActivityEventType(..)
-  , ObjectId(ObjectId)
   , registerPorts
   , notifyUIUpdate
   , initUI
@@ -22,16 +21,13 @@ module Demo.Android.UI
 
 import           Control.Concurrent                  (runInBoundThread, forkIO)
 import           Control.Concurrent.MVar             (MVar, tryTakeMVar, putMVar, takeMVar, newMVar)
-import           Control.DeepSeq                     (NFData)
 import           Control.Exception                   (SomeException)
 import           Control.Exception.Safe              (isSyncException)
-import           Control.Lens.TH                     (makeLenses)
 import           Control.Monad                       (when, (<=<))
 import           Control.Monad.Catch                 (handleJust, handle)
 import           Control.Monad.Except                (MonadError, liftEither)
 import           Control.Monad.IO.Class              (MonadIO(liftIO))
 import           Data.Bool                           (bool)
-import           Data.Default                        (Default(def))
 import           Data.Foldable                       (for_, find)
 import           Data.Functor                        (void)
 import           Data.Int                            (Int32)
@@ -53,10 +49,9 @@ import           Language.Java                       (J(J), JString,
 import           Prelude.Singletons                  (SingI(sing), Sing, SomeSing(SomeSing))
 
 import           Demo.Android.Log                    (debug, info, err)
-import           Demo.Android.System                 (JContext, IntentFilter, JIntent)
 
-buttonViewId :: Int32
-buttonViewId = 123
+textViewId :: Int32
+textViewId = 123
 
 buttonClickEventId :: Int32
 buttonClickEventId = 1001
@@ -66,35 +61,18 @@ handleException_ =
   handleJust (find isSyncException . Just) (\(ex :: SomeException) -> (err . T.pack . show $ ex) >>= pure undefined)
     . handle (\(ex :: JVMException) -> (showException ex >>= err) >>= pure undefined)
 
-handleException :: (MonadIO m, MonadError Text m) => IO a -> m a
-handleException =
-  liftEither <=< liftIO . handleJust (find isSyncException . Just) (\(ex :: SomeException) -> pure . Left . T.pack . show $ ex)
-    . handle (\(ex :: JVMException) -> fmap Left $ showException ex) . fmap Right
-
+type JContext = J ('Class "android.content.Context")
 type JActivity = J ('Class "android.app.Activity")
 type JView = J ('Class "android.view.View")
 
-newtype ObjectId = ObjectId Int32
-  deriving (Eq, Ord, Show)
-  deriving newtype NFData
-
-objectId :: JObject -> IO ObjectId
-objectId obj = fmap ObjectId (callStatic "java.lang.System" "identityHashCode" obj :: IO Int32)
-
 data ActivityEventType
   = ActivityCreate
-  | ActivityRestart
-  | ActivityStart
-  | ActivityResume
-  | ActivityPause
-  | ActivityStop
-  | ActivityDestroy
-  deriving (Eq, Ord, Show, Generic, NFData, Bounded, Enum)
+  deriving (Eq, Ord, Show, Generic, Bounded, Enum)
 
 data EventDetails
   = ActivityEvent JActivity ActivityEventType
   | MethodInvocation Text JObjectArray
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic)
 
 instance Interpretation EventDetails where
   type Interp EventDetails = 'Class "p2p.demo.Events.Event"
@@ -119,7 +97,7 @@ instance Reify EventDetails where
       _ -> undefined -- TODO
 
 data Event = Event Int32 EventDetails
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic)
 
 type UIUpdateCallback = JNIEnv -> Ptr JClass -> Ptr JActivity -> IO ()
 foreign import ccall "wrapper" wrapUIUpdate :: UIUpdateCallback -> IO (FunPtr UIUpdateCallback)
@@ -143,7 +121,7 @@ registerPorts uiUpdatePort uiEventPort = do
       label <- call
         (unsafeCast activity'' :: J ('Class "androidx.appcompat.app.AppCompatActivity"))
         "findViewById"
-        buttonViewId :: IO JView
+        textViewId :: IO JView
       string <- reflect text
       call
         (unsafeCast label :: J ('Class "android.widget.TextView"))
@@ -210,7 +188,7 @@ initUI activity = handleException_ $ do
       call
         (unsafeCast label :: JView)
         "setId"
-        buttonViewId :: IO ()
+        textViewId :: IO ()
       call
         (unsafeCast label :: J ('Class "android.widget.TextView"))
         "setTextSize"
