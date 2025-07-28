@@ -9,21 +9,16 @@ module Demo.Android.Log
   , runLoggingT
   ) where
 
-import           Control.Monad.Catch                 (bracket)
 import           Control.Monad.IO.Class              (MonadIO(liftIO))
 import           Control.Monad.Logger                (LogLevel(LevelDebug, LevelInfo, LevelWarn,
                                                       LevelError, LevelOther), LoggingT,
                                                       fromLogStr)
 import qualified Control.Monad.Logger                as MonadLogger (runLoggingT)
 import           Data.Text                           (Text)
-import qualified Data.Text                           as T (pack, singleton)
-import qualified Data.Text.Encoding                  as T (encodeUtf8, decodeUtf8)
+import qualified Data.Text.Encoding                  as T (decodeUtf8)
 import qualified Data.Text.Foreign                   as T (withCString)
-import           Data.Time                           (UTCTime, getCurrentTime)
-import           Data.Time.Format                    (defaultTimeLocale, formatTime)
 import           Foreign.C.String                    (CString)
 import           Foreign.C.Types                     (CInt(CInt))
-import           System.IO.Unsafe                    (unsafePerformIO)
 
 data LogPriority
   = PrioUnknown

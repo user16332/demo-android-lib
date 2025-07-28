@@ -22,45 +22,76 @@ import           Data.Int                            (Int32)
 import           Data.Maybe                          (fromMaybe, catMaybes, isNothing)
 import           Data.Text                           (Text)
 import qualified Data.Text                           as T (pack)
+import           Data.Traversable                    (for)
 import           Data.Time.Clock                     (getCurrentTime)
 import           Data.Time.Format                    (formatTime, defaultTimeLocale)
 import           Foreign.JNI                         (JVMException, showException, newGlobalRef, jniInit,
                                                       runInAttachedThread, isSameObject)
 import           Foreign.JNI.Types                   (objectFromPtr)
 import           Foreign.Ptr                         (Ptr)
-import           Language.Java                       (J(J), JNIEnv(..))
+import           Language.Java                       (J(J), JNIEnv(..), unsafeCast)
 
 import           Demo.Android.Log                    (debug, info, err, runLoggingT)
-import           Demo.Android.UI                     (JContext, EventDetails(ActivityEvent, MethodInvocation),
+import           Demo.Android.System                 (JContext, EventDetails(ActivityEvent, MethodInvocation),
                                                       JActivity, ActivityEventType(ActivityCreate), Event(Event),
-                                                      beep, registerPorts, notifyUIUpdate, buttonClickEventId)
+                                                      registerPorts, notifyUIUpdate, beep)
+import           Demo.Android.UI                     (JView, JTextView, activityFindViewById,
+                                                      textViewSetText, activitySetContentView,
+                                                      frameLayoutAddView, mkFrameLayout, mkVerticalLayout,
+                                                      mkButton, mkTextView, linearLayoutAddView)
 
 mainActivityEventId :: Int32
 mainActivityEventId = 1000
 
-loop :: JContext -> MVar Text -> MVar Event -> IO ()
-loop jctx uiUpdatePort uiEventPort = do
-  flip iterateM_ (Nothing, "") $ \(activityOpt0, ui0) -> do
+buttonClickEventId :: Int32
+buttonClickEventId = 1001
+
+textViewId :: Int32
+textViewId = 123
+
+initUI :: JActivity -> IO ()
+initUI activity = do
+  let ctx = unsafeCast activity :: JContext
+  linearLayout <- mkVerticalLayout ctx
+  do
+    frameLayout <- mkFrameLayout ctx
+    linearLayoutAddView linearLayout (unsafeCast frameLayout :: JView)
+    label <- mkTextView ctx 50.0 (Just textViewId)
+    frameLayoutAddView frameLayout (unsafeCast label :: JView)
+  do
+    frameLayout <- mkFrameLayout ctx
+    linearLayoutAddView linearLayout (unsafeCast frameLayout :: JView)
+    button <- mkButton ctx "Beep!" buttonClickEventId
+    frameLayoutAddView frameLayout (unsafeCast button :: JView)
+  activitySetContentView activity (unsafeCast linearLayout :: JView)
+
+updateUI :: JActivity -> Text -> IO ()
+updateUI activity text = do
+  label <- activityFindViewById activity textViewId
+  textViewSetText (unsafeCast label :: JTextView) text
+
+loop :: MVar Text -> MVar Event -> IO ()
+loop uiUpdatePort uiEventPort = do
+  flip iterateM_ (Nothing, "") $ \(mainActivityOpt0, ui0) -> do
     uiEventOpt <- (either Just $ const Nothing) <$> race (takeMVar uiEventPort) (threadDelay 100000 {- 100 ms-})
-    let activityOpt1 =
-          (uiEventOpt >>= \case Event eventId (ActivityEvent activity ActivityCreate) | eventId == mainActivityEventId -> Just activity; _ -> Nothing) <|> activityOpt0
-    for_ uiEventOpt $ \case Event eventId (MethodInvocation _ _) | eventId == buttonClickEventId -> beep; _ -> pure ()
+    mainActivityOpt1 <- flip (maybe $ pure mainActivityOpt0) uiEventOpt $ \case
+      Event eventId (ActivityEvent activity ActivityCreate) | eventId == mainActivityEventId -> pure $ Just activity
+      Event eventId (MethodInvocation _ _) | eventId == buttonClickEventId -> beep *> pure mainActivityOpt0
     utc <- getCurrentTime
     let ui1 = T.pack $ formatTime defaultTimeLocale "%H:%M:%S" utc
-    for_ activityOpt1 $ \activity ->
-      when (ui1 /= ui0 || isNothing activityOpt0) $ do
+    for_ mainActivityOpt1 $ \activity ->
+      when (ui1 /= ui0 || isNothing mainActivityOpt0) $ do
         void $ tryTakeMVar uiUpdatePort
         putMVar uiUpdatePort ui1
         notifyUIUpdate activity
-    pure (activityOpt1, ui1)
+    pure (mainActivityOpt1, ui1)
 
 foreign export ccall "demo_start" start :: Ptr JNIEnv -> Ptr JContext -> IO ()
 
 start :: Ptr JNIEnv -> Ptr JContext -> IO ()
-start jni jctxPtr = do
+start jni _ = do
   jniInit jni
-  jctx <- objectFromPtr jctxPtr >>= newGlobalRef
   uiUpdatePort <- newEmptyMVar
   uiEventPort <- newEmptyMVar
-  registerPorts uiUpdatePort uiEventPort
-  void . forkIO $ loop jctx uiUpdatePort uiEventPort
+  registerPorts uiUpdatePort uiEventPort initUI updateUI
+  void . forkIO $ loop uiUpdatePort uiEventPort
