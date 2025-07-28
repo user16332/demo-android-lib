@@ -79,8 +79,8 @@ loop uiUpdatePort uiEventPort = do
       Event eventId (MethodInvocation _ _) | eventId == buttonClickEventId -> beep *> pure mainActivityOpt0
     utc <- getCurrentTime
     let ui1 = T.pack $ formatTime defaultTimeLocale "%H:%M:%S" utc
-    for_ mainActivityOpt1 $ \activity ->
-      when (ui1 /= ui0 || isNothing mainActivityOpt0) $ do
+    when (ui1 /= ui0 || mainActivityOpt1 /= mainActivityOpt0) $
+      for_ mainActivityOpt1 $ \activity -> do
         void $ tryTakeMVar uiUpdatePort
         putMVar uiUpdatePort ui1
         notifyUIUpdate activity

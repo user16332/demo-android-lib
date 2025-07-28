@@ -1,0 +1,1 @@
+rsync -irlcz --delete cabal.* *.cabal *.nix flake.lock src bitnas:ipfs/haskell/demo-android-lib/
