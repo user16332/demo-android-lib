@@ -75,7 +75,7 @@ data EventDetails
   deriving (Eq, Show, Generic)
 
 instance Interpretation EventDetails where
-  type Interp EventDetails = 'Class "p2p.demo.Events.Event"
+  type Interp EventDetails = 'Class "com.example.haskell_demo.Events.Event"
 
 instance Reify EventDetails where
   reify jevent = do
@@ -83,13 +83,13 @@ instance Reify EventDetails where
     jstring <- call jclass "getName" :: IO JString
     className <- reify jstring :: IO Text
     case className of
-      "p2p.demo.MainActivity$Event" -> do
-        let activityEvent = unsafeCast jevent :: J ('Class "p2p.demo.MainActivity$Event")
+      "com.example.haskell_demo.MainActivity$Event" -> do
+        let activityEvent = unsafeCast jevent :: J ('Class "com.example.haskell_demo.MainActivity$Event")
         activity <- call activityEvent "getActivity" >>= newGlobalRef :: IO JActivity -- TODO: newGLobalRef?
         code <- call activityEvent "getCode" :: IO Int32
         pure . ActivityEvent activity . toEnum . fromIntegral $ code
-      "p2p.demo.VoidInvocationHandler$Event" -> do
-        let methodInvocation = unsafeCast jevent :: J ('Class "p2p.demo.VoidInvocationHandler$Event")
+      "com.example.haskell_demo.VoidInvocationHandler$Event" -> do
+        let methodInvocation = unsafeCast jevent :: J ('Class "com.example.haskell_demo.VoidInvocationHandler$Event")
         jstring <- call methodInvocation "getMethod" >>= newGlobalRef :: IO JString -- TODO: newGLobalRef?
         method <- reify jstring
         args <- call methodInvocation "getArgs" :: IO JObjectArray
@@ -102,7 +102,7 @@ data Event = Event Int32 EventDetails
 type UIUpdateCallback = JNIEnv -> Ptr JClass -> Ptr JActivity -> IO ()
 foreign import ccall "wrapper" wrapUIUpdate :: UIUpdateCallback -> IO (FunPtr UIUpdateCallback)
 
-type UIEventCallback = JNIEnv -> Ptr JClass -> Int32 -> Ptr (J ('Class "p2p.demo.Events.Event")) -> IO ()
+type UIEventCallback = JNIEnv -> Ptr JClass -> Int32 -> Ptr (J ('Class "com.example.haskell_demo.Events.Event")) -> IO ()
 foreign import ccall "wrapper" wrapUIEvent :: UIEventCallback -> IO (FunPtr UIEventCallback)
 
 registerPorts :: MVar Text -> MVar Event -> IO ()
@@ -131,7 +131,7 @@ registerPorts uiUpdatePort uiEventPort = do
   uiEventPtr <- wrapUIEvent $ \_ _ eventId eventPtr -> handleException_ $ do
     details <- objectFromPtr eventPtr >>= reify
     putMVar uiEventPort $ Event eventId details
-  clazz <- getClass (SClass "p2p.demo.Events") >>= newGlobalRef
+  clazz <- getClass (SClass "com.example.haskell_demo.Events") >>= newGlobalRef
   registerNatives clazz
     [ JNINativeMethod
         "onUIUpdate"
@@ -145,7 +145,7 @@ registerPorts uiUpdatePort uiEventPort = do
         "onEvent"
         (methodSignature
           [ SomeSing (sing :: Sing ('Prim "int"))
-          , SomeSing (sing :: Sing ('Class "p2p.demo.Events$Event"))
+          , SomeSing (sing :: Sing ('Class "com.example.haskell_demo.Events$Event"))
           ]
           (sing :: Sing 'Void)
         )
@@ -218,7 +218,7 @@ initUI activity = handleException_ $ do
         "setText"
         (unsafeCast text :: J ('Class "java.lang.CharSequence")) :: IO ()
       do
-        handler <- new buttonClickEventId :: IO (J ('Class "p2p.demo.VoidInvocationHandler"))
+        handler <- new buttonClickEventId :: IO (J ('Class "com.example.haskell_demo.VoidInvocationHandler"))
         interface <- getClass (SClass "android.view.View$OnClickListener")
         classLoader <- call interface "getClassLoader" :: IO (J ('Class "java.lang.ClassLoader"))
         interfaces <- toArray [ interface ]
