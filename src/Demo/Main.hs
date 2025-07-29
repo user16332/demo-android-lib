@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Demo.Main () where
+module Demo.Main where
 
 import           Control.Applicative                 ((<|>))
 import           Control.Concurrent                  (threadDelay, forkIO)
@@ -25,11 +25,12 @@ import qualified Data.Text                           as T (pack)
 import           Data.Traversable                    (for)
 import           Data.Time.Clock                     (getCurrentTime)
 import           Data.Time.Format                    (formatTime, defaultTimeLocale)
-import           Foreign.JNI                         (JVMException, showException, newGlobalRef, jniInit,
-                                                      runInAttachedThread, isSameObject)
+import           Foreign.JNI                         (JVMException, showException, newGlobalRef, setJVM,
+                                                      runInAttachedThread, isSameObject, getEnvJVM, getVersion)
 import           Foreign.JNI.Types                   (objectFromPtr)
 import           Foreign.Ptr                         (Ptr)
 import           Language.Java                       (J(J), JNIEnv(..), unsafeCast)
+import           Text.Printf                         (printf)
 
 import           Demo.Android.Log                    (debug, info, err, runLoggingT)
 import           Demo.Android.System                 (JContext, EventDetails(ActivityEvent, MethodInvocation),
@@ -89,8 +90,11 @@ loop uiUpdatePort uiEventPort = do
 foreign export ccall "demo_start" start :: Ptr JNIEnv -> Ptr JContext -> IO ()
 
 start :: Ptr JNIEnv -> Ptr JContext -> IO ()
-start jni _ = do
-  jniInit jni
+start jniEnv _ = do
+  (hi, lo) <- getVersion jniEnv
+  info . T.pack $ printf "*** Demo starting. JNI v%d.%d" hi lo
+  jvm <- getEnvJVM jniEnv
+  setJVM jvm
   uiUpdatePort <- newEmptyMVar
   uiEventPort <- newEmptyMVar
   registerPorts uiUpdatePort uiEventPort initUI updateUI
