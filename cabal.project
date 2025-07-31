@@ -5,12 +5,12 @@ with-compiler: ghc-9.6.3
 
 source-repository-package
     type: git
-    location: git://localhost/inline-java
-    tag: b99a920a9970f20b2cf6eeb783fe62e3565c8d7e
+    location: https://github.com/user16332/inline-java.git
+    tag: 8e391e2c8170a836b807559b9774fc529bc8b6f1
     subdir: jni
 
 source-repository-package
     type: git
-    location: git://localhost/inline-java
-    tag: b99a920a9970f20b2cf6eeb783fe62e3565c8d7e
+    location: https://github.com/user16332/inline-java.git
+    tag: 8e391e2c8170a836b807559b9774fc529bc8b6f1
     subdir: jvm

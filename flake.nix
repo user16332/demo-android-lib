@@ -41,11 +41,6 @@
         };
         sha256map = import ./sha256map.nix;
         modules = [
-        ({ pkgs, lib, ...}: lib.mkIf (!pkgs.stdenv.hostPlatform.isWindows) {
-          # This patch adds `dl` as an extra-library to direct-sqlciper, which is needed
-          # on pretty much all unix platforms, but then blows up on windows m(
-          packages.direct-sqlcipher.patches = [ ./scripts/nix/direct-sqlcipher-2.3.27.patch ];
-        })
         ({ pkgs,lib, ... }: lib.mkIf (pkgs.stdenv.hostPlatform.isAndroid) {
           packages.demo.components.library.ghcOptions = [ "-pie" ];
         })] ++ extra-modules;
