@@ -1,0 +1,28 @@
+name:               demo
+version:            1.0
+Build-Type:         Simple
+cabal-version:      >=1.10
+
+Library
+  other-modules:    Demo.Android.Log
+                    Demo.Android.System
+                    Demo.Android.UI
+                    Demo.Main
+  ghc-options:      -O2 -Wall -fno-ignore-asserts -fwarn-tabs -fwarn-missing-import-lists -Wunused-packages
+  build-depends:    async,
+                    base,
+                    clock,
+                    errors,
+                    exceptions,
+                    jni,
+                    jvm,
+                    monad-logger,
+                    monad-loops,
+                    mtl,
+                    refined == 0.8.*,
+                    safe-exceptions,
+                    singletons-base,
+                    text,
+                    time
+  hs-source-dirs:   src
+  default-language: GHC2021

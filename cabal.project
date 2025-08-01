@@ -1,0 +1,16 @@
+packages: .
+flags: +no-get-created-java-vms
+
+with-compiler: ghc-9.6.3
+
+source-repository-package
+    type: git
+    location: https://github.com/user16332/inline-java.git
+    tag: 8770fda9aa27964192acf64c58621c3719d371e9
+    subdir: jni
+
+source-repository-package
+    type: git
+    location: https://github.com/user16332/inline-java.git
+    tag: 8770fda9aa27964192acf64c58621c3719d371e9
+    subdir: jvm
