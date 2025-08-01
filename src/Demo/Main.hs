@@ -26,7 +26,8 @@ import           Data.Traversable                    (for)
 import           Data.Time.Clock                     (getCurrentTime)
 import           Data.Time.Format                    (formatTime, defaultTimeLocale)
 import           Foreign.JNI                         (JVMException, showException, newGlobalRef, setJVM,
-                                                      runInAttachedThread, isSameObject, getEnvJVM, getVersion)
+                                                      runInAttachedThread, isSameObject, getEnvJVM, getVersion,
+                                                      startFinalizerThread)
 import           Foreign.JNI.Types                   (objectFromPtr)
 import           Foreign.Ptr                         (Ptr)
 import           Language.Java                       (J(J), JNIEnv(..), unsafeCast)
@@ -95,6 +96,7 @@ start jniEnv _ = do
   info . T.pack $ printf "*** Demo starting. JNI v%d.%d" hi lo
   jvm <- getEnvJVM jniEnv
   setJVM jvm
+  startFinalizerThread
   uiUpdatePort <- newEmptyMVar
   uiEventPort <- newEmptyMVar
   registerPorts uiUpdatePort uiEventPort initUI updateUI
